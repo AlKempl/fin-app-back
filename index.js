@@ -18,81 +18,27 @@ app.use(compression())
 
 var jsonParser = bodyParser.json()
 
-app.get('/home/spending',
-    [
-        validation.check('userId').not().isEmpty(),
-    ], jsonParser,
-    (req, res) => {
-        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
-            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
-        }
-
-        const errors = validation.validationResult(req)
-
-        if (!errors.isEmpty()) {
-            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
-        }
-
-        const {userId} = req.body;
-
-        pool.query(`select u.id           as userId,
-       sum(t.amt_rub) as totalAmt
+async function userSpending(userId) {
+    try {
+        const res = await pool.query(`select sum(t.amt_rub) as totalAmt
 from "user" u
          inner join account a on u.id = a.user_id
          inner join transaction t on t.from_id = a.id
 where u.id = $1
 and date_trunc('month', t.transaction_dttm) = date_trunc('month', current_date)
-group by u.id
-`, [userId], (error, results) => {
-            if (error) {
-                throw error
-            }
-            if (results.rows.length === 0)
-                res.status(200).json({userId: userId, totalAmt: 0})
-            else
-                res.status(200).json(results.rows)
-        })
-    });
+group by u.id`, [userId]);
+        if (res.rows.length === 0)
+            return 0;
+        else
+            return res.rows[0]['totalamt'];
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
 
-app.get('/limits',
-    [
-        validation.check('accountId').not().isEmpty(),
-    ], jsonParser,
-    async (req, res) => {
-        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
-            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
-        }
-
-        const errors = validation.validationResult(req)
-
-        if (!errors.isEmpty()) {
-            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
-        }
-
-        const {accountId} = req.body;
-
-        let limits = await getCurrentUsageLimits(accountId);
-        res.status(200).json({accountId: accountId, limits: limits})
-    });
-
-app.get('/home/accounts',
-    [
-        validation.check('userId').not().isEmpty(),
-    ], jsonParser,
-    (req, res) => {
-        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
-            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
-        }
-
-        const errors = validation.validationResult(req)
-
-        if (!errors.isEmpty()) {
-            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
-        }
-
-        const {userId} = req.body;
-
-        pool.query(`select u.id as userId
+async function userAccounts(userId) {
+    try {
+        const res = await pool.query(`select u.id as userId
 , a.id as accountId
 , a.type_code as accountType
 , a.status_code as accountStatus
@@ -104,65 +50,42 @@ from "user" u
 inner join account a on u.id = a.user_id
 where u.id = $1
 and now() between a.open_dttm and coalesce(a.close_dttm, '5999-01-01'::date)
-and status_code <> 'CLO'
-`, [userId], (error, results) => {
-            if (error) {
-                throw error
-            }
-            if (results.rows.length === 0)
-                res.status(200).json({userId: userId, accounts: []})
-            else
-                res.status(200).json({userId: userId, accounts: results.rows})
-        })
-    });
+and status_code <> 'CLO'`, [userId]);
+        if (res.rows.length === 0)
+            return [];
+        else
+            return res.rows;
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
 
-app.post('/home/accounts',
-    [
-        validation.check('userId').not().isEmpty(),
-    ], jsonParser,
-    (req, res) => {
-        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
-            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
-        }
-
-        const errors = validation.validationResult(req)
-
-        if (!errors.isEmpty()) {
-            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
-        }
-
-        const {userId} = req.body;
-
-        pool.query(`insert into account (user_id, agreement_code)
- VALUES ($1, upper('CU-AGR-'||(floor(random() * 10000000)::int)::text|| substring(md5(now()::varchar), 1, 8)))
-`, [userId], (error, results) => {
-            if (error) {
-                return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
-            } else {
-                res.status(200).json({status: 'ok', message: 'Account created.'})
-            }
-        })
-    });
-
-app.get('/services', jsonParser,
-    (req, res) => {
-        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
-            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
-        }
-
-        pool.query(`select id
+async function servicesList() {
+    try {
+        const res = await pool.query(`select id
 , service_nm as serviceName
 , service_img_url as imgUrl
 , merchant_nm as providerName
 from merchant m
-where service_flg = 1
-`, (error, results) => {
-            if (error) {
-                throw error
-            }
-            res.status(200).json(results.rows)
-        })
-    });
+where service_flg = 1`, []);
+        if (res.rows.length === 0)
+            return [];
+        else
+            return res.rows;
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
+
+async function addUserAccount(userId) {
+    try {
+        const res = await pool.query(`insert into account (user_id, agreement_code)
+ VALUES ($1, upper('CU-AGR-'||(floor(random() * 10000000)::int)::text|| substring(md5(now()::varchar), 1, 8)))`, [userId]);
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
+
 
 async function balanceEnough(fromType, fromId, transactionAmtFloat) {
     if (fromType === 'external') {
@@ -191,7 +114,7 @@ async function updateUsageLimits(accountId, merchantId, sumAmt) {
     try {
         const res = await pool.query(`update account_x_limit axl set rub_spent_amt = rub_spent_amt + $3::numeric 
 where account_id = $1 and merchant_id = $2 and month_dt = date_trunc('month', current_date) returning rub_spent_amt`, [accountId, merchantId, sumAmt]);
-        if(res.rows.length === 0)
+        if (res.rows.length === 0)
             return null
         else
             return res.rows[0]['rub_spent_amt'];
@@ -223,7 +146,7 @@ and a.type_code = 'protected'
 and a.status_code = 'ACT'
 and now() between a.open_dttm and coalesce(a.close_dttm, '5999-01-01'::timestamp)
 limit 1`, [accountId]);
-        if(res.rows.length === 0)
+        if (res.rows.length === 0)
             return null
         else
             return res.rows[0]['protectionaccountid'];
@@ -238,7 +161,7 @@ async function getAccountStatus(accountId) {
         and (now() between a.open_dttm and coalesce(a.close_dttm, '5999-01-01'::timestamp)))::int as is_usable
         from account a
         where a.id = $1`, [accountId]);
-        if(res.rows.length === 0)
+        if (res.rows.length === 0)
             return false
         else
             return res.rows[0]['is_usable'];
@@ -256,6 +179,100 @@ VALUES ($1, $2, $3, $4, $5, $6, $7)`, [fromType, fromId, toType, toId, type, tra
     }
 
 }
+
+app.get('/home/spending',
+    [
+        validation.check('userId').not().isEmpty(),
+    ], jsonParser,
+    async (req, res) => {
+        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
+        }
+
+        const errors = validation.validationResult(req)
+
+        if (!errors.isEmpty()) {
+            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
+        }
+
+        const {userId} = req.body;
+
+        let userSpending = await userSpending(userId);
+
+        res.status(200).json({userId: userId, totalAmt: Number.parseFloat(userSpending)});
+    });
+
+app.get('/limits',
+    [
+        validation.check('accountId').not().isEmpty(),
+    ], jsonParser,
+    async (req, res) => {
+        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
+        }
+
+        const errors = validation.validationResult(req)
+
+        if (!errors.isEmpty()) {
+            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
+        }
+
+        const {accountId} = req.body;
+
+        let limits = await getCurrentUsageLimits(accountId);
+        res.status(200).json({accountId: accountId, limits: limits})
+    });
+
+app.get('/home/accounts',
+    [
+        validation.check('userId').not().isEmpty(),
+    ], jsonParser,
+    async (req, res) => {
+        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
+        }
+
+        const errors = validation.validationResult(req)
+
+        if (!errors.isEmpty()) {
+            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
+        }
+
+        const {userId} = req.body;
+
+        let accounts = await userAccounts(userId);
+        res.status(200).json({userId: userId, accounts: accounts});
+    });
+
+app.post('/home/accounts',
+    [
+        validation.check('userId').not().isEmpty(),
+    ], jsonParser,
+    async (req, res) => {
+        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
+        }
+
+        const errors = validation.validationResult(req)
+
+        if (!errors.isEmpty()) {
+            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
+        }
+
+        const {userId} = req.body;
+        await addUserAccount(userId);
+        res.status(200).json({status: 'ok', message: 'Account created.'})
+    });
+
+app.get('/services', jsonParser,
+    async (req, res) => {
+        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
+        }
+
+        let services = await servicesList();
+        res.status(200).json({status: 'ok', services: services});
+    });
 
 app.post('/transaction',
     [

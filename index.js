@@ -280,6 +280,7 @@ async function userAccounts(userId) {
 , a.transfer_to_merchant_id as transferToMerchantId
 , a.agreement_code as agreementCode
 , a.balance_rub_amt as balanceRubAmt
+, a.emitter
 from "user" u
 inner join account a on u.id = a.user_id
 where u.id = $1

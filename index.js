@@ -24,13 +24,13 @@ app.get('/home/spending',
     ], jsonParser,
     (req, res) => {
         if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
-            return res.status(401).json({status: 'error', message: 'Unauthorized.'})
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
         }
 
         const errors = validation.validationResult(req)
 
         if (!errors.isEmpty()) {
-            return res.status(422).json({errors: errors.array()})
+            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
         }
 
         const {userId} = req.body;
@@ -60,13 +60,13 @@ app.get('/limits',
     ], jsonParser,
     async (req, res) => {
         if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
-            return res.status(401).json({status: 'error', message: 'Unauthorized.'})
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
         }
 
         const errors = validation.validationResult(req)
 
         if (!errors.isEmpty()) {
-            return res.status(422).json({errors: errors.array()})
+            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
         }
 
         const {accountId} = req.body;
@@ -81,13 +81,13 @@ app.get('/home/accounts',
     ], jsonParser,
     (req, res) => {
         if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
-            return res.status(401).json({status: 'error', message: 'Unauthorized.'})
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
         }
 
         const errors = validation.validationResult(req)
 
         if (!errors.isEmpty()) {
-            return res.status(422).json({errors: errors.array()})
+            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
         }
 
         const {userId} = req.body;
@@ -122,13 +122,13 @@ app.post('/home/accounts',
     ], jsonParser,
     (req, res) => {
         if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
-            return res.status(401).json({status: 'error', message: 'Unauthorized.'})
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
         }
 
         const errors = validation.validationResult(req)
 
         if (!errors.isEmpty()) {
-            return res.status(422).json({errors: errors.array()})
+            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
         }
 
         const {userId} = req.body;
@@ -137,7 +137,7 @@ app.post('/home/accounts',
  VALUES ($1, upper('CU-AGR-'||(floor(random() * 10000000)::int)::text|| substring(md5(now()::varchar), 1, 8)))
 `, [userId], (error, results) => {
             if (error) {
-                return res.status(422).json({errors: errors.array()})
+                return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
             } else {
                 res.status(200).json({status: 'ok', message: 'Account created.'})
             }
@@ -147,7 +147,7 @@ app.post('/home/accounts',
 app.get('/services', jsonParser,
     (req, res) => {
         if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
-            return res.status(401).json({status: 'error', message: 'Unauthorized.'})
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
         }
 
         pool.query(`select id
@@ -187,14 +187,19 @@ async function updateBalance(fromId, transactionAmtFloat) {
     }
 }
 
-async function updateUsageLimits(accountId, sumAmt) {
+async function updateUsageLimits(accountId, merchantId, sumAmt) {
     try {
-        const res = await pool.query(`update account_x_limit axl set rub_spent_amt = rub_spent_amt + $2::numeric 
-where account_id = $1 and month_dt = date_trunc('month', current_date)`, [accountId, sumAmt]);
+        const res = await pool.query(`update account_x_limit axl set rub_spent_amt = rub_spent_amt + $3::numeric 
+where account_id = $1 and merchant_id = $2 and month_dt = date_trunc('month', current_date) returning rub_spent_amt`, [accountId, merchantId, sumAmt]);
+        if(res.rows.length === 0)
+            return null
+        else
+            return res.rows[0]['rub_spent_amt'];
     } catch (err) {
         console.error(err.stack);
     }
 }
+
 async function getCurrentUsageLimits(accountId) {
     try {
         const res = await pool.query(`select axl.merchant_id as merchantId, axl.rub_limit_amt as rubLimitAmt,
@@ -204,6 +209,39 @@ left join account a on axl.merchant_id = a.merchant_id
 where axl.account_id = $1
 and axl.month_dt = date_trunc('month', current_date)`, [accountId]);
         return res.rows;
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
+
+async function getProtectionAccount(accountId) {
+    try {
+        const res = await pool.query(`select id as protectionAccountId
+from account a
+where user_id in (select user_id from account a where a.id = $1 limit 1)
+and a.type_code = 'protected'
+and a.status_code = 'ACT'
+and now() between a.open_dttm and coalesce(a.close_dttm, '5999-01-01'::timestamp)
+limit 1`, [accountId]);
+        if(res.rows.length === 0)
+            return null
+        else
+            return res.rows[0]['protectionaccountid'];
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
+
+async function getAccountStatus(accountId) {
+    try {
+        const res = await pool.query(`select ((a.status_code = 'ACT')
+        and (now() between a.open_dttm and coalesce(a.close_dttm, '5999-01-01'::timestamp)))::int as is_usable
+        from account a
+        where a.id = $1`, [accountId]);
+        if(res.rows.length === 0)
+            return false
+        else
+            return res.rows[0]['is_usable'];
     } catch (err) {
         console.error(err.stack);
     }
@@ -230,38 +268,72 @@ app.post('/transaction',
     ], jsonParser,
     async (req, res) => {
         if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
-            return res.status(401).json({status: 'error', message: 'Unauthorized.'})
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
         }
 
         const errors = validation.validationResult(req)
 
         if (!errors.isEmpty()) {
-            return res.status(422).json({errors: errors.array()})
+            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
         }
 
         const {fromId, fromType, toId, toType, type, amtRub, comment} = req.body;
         let transactionAmtFloat = Number.parseFloat(amtRub);
+        if (fromType === 'account') {
+            let isUsable = await getAccountStatus(fromId);
+            if (!isUsable) {
+                return res.status(400).json({status: 'error', code: 'A1', message: 'Account is not usable.'});
+            }
+        }
 
         let isBalanceEnough = await balanceEnough(fromType, fromId, transactionAmtFloat);
-        if (isBalanceEnough) {
-            await insertTransaction(fromType, fromId, toType, toId, type, transactionAmtFloat, comment)
-            if (fromType === 'account') {
-                await updateBalance(fromId, -transactionAmtFloat);
-            }
-            if (toType === 'account') {
-                await updateBalance(toId, transactionAmtFloat);
-
-                let limits = await getCurrentUsageLimits(fromId);
-                let limit = _.find(limits, function(o) { return o.merchantAccountId === toId; });
-                if(limit){
-
-                }
-            }
-
-            return res.status(200).json({status: 'ok', message: 'Transaction created.'});
-        } else {
-            return res.status(400).json({status: 'error', message: 'Not enough money.'})
+        if (!isBalanceEnough) {
+            return res.status(400).json({status: 'error', code: 'F1', message: 'Not enough money.'});
         }
+
+        await insertTransaction(fromType, fromId, toType, toId, type, transactionAmtFloat, comment)
+
+        if (fromType === 'account') {
+            await updateBalance(fromId, -transactionAmtFloat);
+        }
+        if (toType === 'account') {
+            await updateBalance(toId, transactionAmtFloat);
+        }
+
+        let limits = await getCurrentUsageLimits(fromId);
+        let limit = _.find(limits, function (o) {
+            let merchantAccountId = Number.parseInt(o.merchantaccountid);
+            return merchantAccountId === Number.parseInt(toId);
+        });
+
+        let limit_exists = false;
+        let protected_transaction = false;
+
+        if (limit) {
+            limit_exists = true;
+            let merchantId = Number.parseInt(limit.merchantid);
+            let newSpentAmt = await updateUsageLimits(fromId, merchantId, transactionAmtFloat);
+            let rubSpentAmt = Number.parseFloat(newSpentAmt);
+            let rubLimitAmt = Number.parseFloat(limit.rublimitamt);
+
+            if (rubSpentAmt > rubLimitAmt) {
+                protected_transaction = true;
+
+                let protectionAccountId = await getProtectionAccount(fromId);
+
+                await insertTransaction('account', fromId, 'account', protectionAccountId, 'protection', transactionAmtFloat, comment)
+                await updateBalance(fromId, -transactionAmtFloat);
+                await updateBalance(protectionAccountId, transactionAmtFloat);
+            }
+        }
+
+        return res.status(200).json({
+            status: 'ok',
+            message: 'Transaction created.',
+            limitExists: limit_exists,
+            protectedTransaction: protected_transaction
+        });
+
 
     });
 

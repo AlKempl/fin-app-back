@@ -101,7 +101,8 @@ app.get('/auth',
             return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
         }
 
-        const {authKey} = req.body;
+        //const {authKey} = req.body;
+        const authKey = req.query.authKey;
 
         let userData = await userAuthWithKey(authKey);
 

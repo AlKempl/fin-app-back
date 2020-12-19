@@ -38,7 +38,7 @@ app.get('/home/spending',
             return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
         }
 
-        const {userId} = req.body;
+        const userId = req.query.userId;
 
         let userSpendingData = await userSpending(userId);
         res.status(200).json({userId: userId, totalAmt: userSpendingData});
@@ -59,7 +59,7 @@ app.get('/limits',
             return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
         }
 
-        const {accountId} = req.body;
+        const accountId = req.query.accountId;
 
         let limits = await getCurrentUsageLimits(accountId);
         res.status(200).json({accountId: accountId, limits: limits})
@@ -80,7 +80,7 @@ app.get('/home/user',
             return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
         }
 
-        const {userId} = req.body;
+        const userId = req.query.userId;
 
         let userData = await userDetails(userId);
         res.status(200).json(userData)
@@ -127,7 +127,7 @@ app.get('/home/accounts',
             return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
         }
 
-        const {userId} = req.body;
+        const userId = req.query.userId;
 
         let accounts = await userAccounts(userId);
         res.status(200).json({userId: userId, accounts: accounts});

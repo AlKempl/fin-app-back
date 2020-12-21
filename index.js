@@ -133,6 +133,32 @@ app.get('/home/accounts',
         res.status(200).json({userId: userId, accounts: accounts});
     });
 
+app.get('/account/transactions',
+    [
+        validation.check('accountId').not().isEmpty(),
+    ], jsonParser,
+    async (req, res) => {
+        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
+        }
+
+        const errors = validation.validationResult(req)
+
+        if (!errors.isEmpty()) {
+            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
+        }
+
+        const accountId = req.query.accountId;
+
+        let isUsable = await getAccountStatus(accountId);
+        if (!isUsable) {
+            return res.status(400).json({status: 'error', code: 'A1', message: 'Account is not usable.'});
+        }
+
+        let transactionsList = await accountTransactions(accountId);
+        return res.status(200).json({accountId: accountId, transactions: transactionsList});
+    });
+
 app.post('/home/accounts',
     [
         validation.check('userId').not().isEmpty(),
@@ -287,6 +313,30 @@ inner join account a on u.id = a.user_id
 where u.id = $1
 and now() between a.open_dttm and coalesce(a.close_dttm, '5999-01-01'::date)
 and status_code <> 'CLO'`, [userId]);
+        if (res.rows.length === 0)
+            return [];
+        else
+            return res.rows;
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
+
+async function accountTransactions(accountId) {
+    try {
+        const res = await pool.query(`select id as transactionId
+     , from_type as fromType
+     , from_id as fromId
+     , to_type as toType
+     , to_id as toId
+     , transaction_type as transactionType
+     , transaction_dttm as transactionTimestamp
+     , amt_rub as transactionAmtRub
+     , comment
+     , transfer_to_merchant_id as shouldBeTransferedToMerchantId
+from transaction t
+where (t.from_type = 'account' and t.from_id = $1)
+   or (t.to_type = 'account' and t.to_id = $1)`, [accountId]);
         if (res.rows.length === 0)
             return [];
         else

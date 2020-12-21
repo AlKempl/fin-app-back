@@ -334,6 +334,7 @@ async function accountTransactions(accountId) {
      , amt_rub as transactionAmtRub
      , comment
      , transfer_to_merchant_id as shouldBeTransferedToMerchantId
+     , (t.to_type = 'account' and t.to_id = $1) as isIncoming
 from transaction t
 where (t.from_type = 'account' and t.from_id = $1)
    or (t.to_type = 'account' and t.to_id = $1)`, [accountId]);

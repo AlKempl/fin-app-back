@@ -598,7 +598,7 @@ where user_id = $1
 and a.type_code = 'main'
 and a.status_code = 'ACT'
 and now() between a.open_dttm and coalesce(a.close_dttm, '5999-01-01'::timestamp)
-limit 1`, [accountId]);
+limit 1`, [userId]);
         if (res.rows.length === 0)
             return null
         else

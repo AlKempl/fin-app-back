@@ -96,10 +96,7 @@ app.get('/auth', jsonParser,
         let mainAccountId = await addBasicAccounts(userId);
         await addBasicLimits(mainAccountId);
 
-        if (!userData)
-            return res.status(401).json({status: 'error', code: 'TK', message: 'Unauthorized.'})
-        else
-            return res.status(200).json({userid: userId, mainaccountid:mainAccountId});
+        return res.status(200).json({userid: userId, mainaccountid: mainAccountId});
     });
 
 app.get('/home/accounts',
@@ -202,10 +199,10 @@ app.get('/statement',
             let savedAmt = rubSpentAmt - rubLimitAmt;
             if (rubSpentAmt > rubLimitAmt * 2) {
                 // transfer money to a fund
-                await insertTransaction('account', protectionAccountId, 'account', fund.accountId, 'transfer', savedAmt, "Перевод защищенных средств в фонд "+fund.name)
+                await insertTransaction('account', protectionAccountId, 'account', fund.accountId, 'transfer', savedAmt, "Перевод защищенных средств в фонд " + fund.name)
                 await updateBalance(protectionAccountId, -savedAmt);
                 await updateBalance(fund.accountId, savedAmt);
-            }else{
+            } else {
                 // chargeback
                 await insertTransaction('account', protectionAccountId, 'account', mainAccountId, 'chargeback', savedAmt, "Возврат защищенных средств")
                 await updateBalance(protectionAccountId, -savedAmt);
@@ -444,19 +441,22 @@ VALUES (DEFAULT, 'Сидоров', 'Иван', 'Петрович', random_string
 
 
 async function addBasicAccounts(userId) {
+    let mainAccountId = 4;
     try {
-        const res = await pool.query(`INSERT INTO account (user_id, id, type_code, caption, open_dttm, close_dttm, transfer_to_merchant_id,
+        const res = await pool.query(`INSERT INTO account (user_id, type_code, caption, open_dttm, close_dttm, transfer_to_merchant_id,
                             agreement_code, balance_rub_amt, merchant_id, status_code, emitter)
-VALUES ($1, DEFAULT, 'main', 'Счет', now(), null, null, 
+VALUES ($1, 'main', 'Счет', current_timestamp, null, null, 
 upper('CU-AGR-'||(floor(random() * 1000000)::int)::text|| substring(md5(now()::varchar), 1, 8) || '-1') , 29882.6800, null, 'ACT',
         'tnkf') returning id`, [userId]);
-        await pool.query(`INSERT INTO account (user_id, id, type_code, caption, open_dttm, close_dttm, transfer_to_merchant_id,
-                            agreement_code, balance_rub_amt, merchant_id, status_code, emitter)
-VALUES ($1, DEFAULT, 'protected', 'Защитная копилка', now(), null, null,
- upper('CU-AGR-'||(floor(random() * 1000000)::int)::text|| substring(md5(now()::varchar), 1, 8) || '-2'), 0.0000,
-        null, 'ACT', 'unknown'))`, [userId]);
+        mainAccountId = res.rows[0]['id'];
 
-        return res.rows[0]['id'];
+       const res2 = await pool.query(`INSERT INTO account (user_id, type_code, caption, open_dttm, close_dttm, transfer_to_merchant_id,
+                            agreement_code, balance_rub_amt, merchant_id, status_code, emitter)
+VALUES ($1, 'protected', 'Защитная копилка', current_timestamp, null, null,
+ upper('CU-AGR-'||(floor(random() * 1000000)::int)::text|| substring(md5(now()::varchar), 1, 8) || '-2'), 0.0000,
+        null, 'ACT', 'unknown')`, [userId]);
+
+        return mainAccountId;
     } catch (err) {
         console.error(err.stack);
     }
@@ -464,10 +464,10 @@ VALUES ($1, DEFAULT, 'protected', 'Защитная копилка', now(), null
 
 async function addBasicLimits(mainAccountId) {
     try {
-        await pool.query(`INSERT INTO public.account_x_limit (id, account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
-VALUES (DEFAULT, $1, 1, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
-        await pool.query(`INSERT INTO public.account_x_limit (id, account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
-VALUES (DEFAULT, $1, 2, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
+        await pool.query(`INSERT INTO public.account_x_limit (account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
+VALUES ($1, 1, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
+        await pool.query(`INSERT INTO public.account_x_limit (account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
+VALUES ($1, 2, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
     } catch (err) {
         console.error(err.stack);
     }
@@ -509,6 +509,7 @@ where account_id = $1 and merchant_id = $2 and month_dt = date_trunc('month', cu
         console.error(err.stack);
     }
 }
+
 async function resetUsageLimits(accountId, merchantId) {
     try {
         const res = await pool.query(`update account_x_limit axl set rub_spent_amt = 0.0 

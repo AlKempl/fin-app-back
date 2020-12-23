@@ -203,7 +203,7 @@ app.get('/statement',
         let fund = {accountId: 12, id: 7, name: '"Благо.ру"'}
 
         let limits = await getCurrentUsageLimits(mainAccountId);
-        for (let limit in limits) {
+        for (let limit of limits) {
             let rubSpentAmt = Number.parseFloat(limit.rubspentamt);
             let rubLimitAmt = Number.parseFloat(limit.rublimitamt);
             let merchantId = Number.parseInt(limit.merchantid);
@@ -548,11 +548,7 @@ where account_id = $1 and merchant_id = $2 and month_dt = date_trunc('month', cu
 async function resetUsageLimits(accountId, merchantId) {
     try {
         const res = await pool.query(`update account_x_limit axl set rub_spent_amt = 0.0 
-where account_id = $1 and merchant_id = $2 and month_dt = date_trunc('month', current_date) returning rub_spent_amt`, [accountId, merchantId]);
-        if (res.rows.length === 0)
-            return null
-        else
-            return res.rows[0]['rub_spent_amt'];
+where account_id = $1 and merchant_id = $2 and month_dt = date_trunc('month', current_date)`, [accountId, merchantId]);
     } catch (err) {
         console.error(err.stack);
     }
@@ -625,6 +621,8 @@ async function getAccountStatus(accountId) {
 
 async function insertTransaction(fromType, fromId, toType, toId, type, transactionAmtFloat, comment) {
     try {
+        // console.log(`insert into transaction ( from_type, from_id, to_type, to_id, transaction_type, amt_rub, comment) ' +
+        //     'VALUES (${fromType}, ${fromId}, ${toType}, ${toId}, ${type}, ${transactionAmtFloat}, ${comment})`);
         const res = await pool.query(`insert into transaction ( from_type, from_id, to_type, to_id, transaction_type, amt_rub, comment) 
 VALUES ($1, $2, $3, $4, $5, $6, $7)`, [fromType, fromId, toType, toId, type, transactionAmtFloat, comment]);
     } catch (err) {

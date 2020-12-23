@@ -201,7 +201,7 @@ app.get('/statement',
 
         let mainAccountId = await getMainAccount(userId);
         let protectionAccountId = await getProtectionAccount(mainAccountId);
-        let fund = {accountId: 12, id: 7, name: '"Благо.ру"'}
+        let fund = {accountId: 16, id: 15, name: '"Подари жизнь"'}
 
         let limits = await getCurrentUsageLimits(mainAccountId);
         for (let limit of limits) {

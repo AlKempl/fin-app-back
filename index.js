@@ -189,14 +189,48 @@ app.get('/services', jsonParser,
         res.status(200).json({status: 'ok', services: services});
     });
 
-app.get('/statement', jsonParser,
+app.get('/statement',
+    [
+        validation.check('userId').not().isEmpty(),
+    ], jsonParser,
     async (req, res) => {
         if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
             return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
         }
 
-        let statement = await statementGet();
-        res.status(200).json({status: 'ok', statement: statement});
+        const userId = req.query.userId;
+
+        let mainAccountId = await getMainAccount(userId);
+        let protectionAccountId = await getProtectionAccount(mainAccountId);
+        let fund = {accountId: 12, id: 7, name: '"Благо.ру"'}
+
+        let limits = await getCurrentUsageLimits(mainAccountId);
+        for (let limit in limits) {
+            let rubSpentAmt = Number.parseFloat(limit.rubspentamt);
+            let rubLimitAmt = Number.parseFloat(limit.rublimitamt);
+            let merchantId = Number.parseInt(limit.merchantid);
+            let savedAmt = rubSpentAmt - rubLimitAmt;
+            if (rubSpentAmt > rubLimitAmt * 2) {
+                // transfer money to a fund
+                await insertTransaction('account', protectionAccountId, 'account', fund.accountId, 'transfer', savedAmt, "Перевод защищенных средств в фонд "+fund.name)
+                await updateBalance(protectionAccountId, -savedAmt);
+                await updateBalance(fund.accountId, savedAmt);
+            }else{
+                // chargeback
+                await insertTransaction('account', protectionAccountId, 'account', mainAccountId, 'chargeback', savedAmt, "Возврат защищенных средств")
+                await updateBalance(protectionAccountId, -savedAmt);
+                await updateBalance(mainAccountId, savedAmt);
+            }
+            await resetUsageLimits(mainAccountId, merchantId);
+        }
+
+        let feeAmt = 20.0;
+        await insertTransaction('account', mainAccountId, 'external', 4242, 'fee', feeAmt, "Комиссия за использование копилки")
+        await updateBalance(mainAccountId, -feeAmt);
+
+        // increment statement_dt with a month
+
+        res.status(200).json({status: 'ok', statement: 'done'});
     });
 
 app.post('/transaction',
@@ -441,6 +475,18 @@ where account_id = $1 and merchant_id = $2 and month_dt = date_trunc('month', cu
         console.error(err.stack);
     }
 }
+async function resetUsageLimits(accountId, merchantId) {
+    try {
+        const res = await pool.query(`update account_x_limit axl set rub_spent_amt = 0.0 
+where account_id = $1 and merchant_id = $2 and month_dt = date_trunc('month', current_date) returning rub_spent_amt`, [accountId, merchantId, sumAmt]);
+        if (res.rows.length === 0)
+            return null
+        else
+            return res.rows[0]['rub_spent_amt'];
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
 
 async function getCurrentUsageLimits(accountId) {
     try {
@@ -469,6 +515,24 @@ limit 1`, [accountId]);
             return null
         else
             return res.rows[0]['protectionaccountid'];
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
+
+async function getMainAccount(userId) {
+    try {
+        const res = await pool.query(`select id as mainAccountId
+from account a
+where user_id = $1
+and a.type_code = 'main'
+and a.status_code = 'ACT'
+and now() between a.open_dttm and coalesce(a.close_dttm, '5999-01-01'::timestamp)
+limit 1`, [accountId]);
+        if (res.rows.length === 0)
+            return null
+        else
+            return res.rows[0]['mainaccountid'];
     } catch (err) {
         console.error(err.stack);
     }

@@ -176,6 +176,16 @@ app.get('/services', jsonParser,
         res.status(200).json({status: 'ok', services: services});
     });
 
+app.get('/wipe', jsonParser,
+    async (req, res) => {
+        if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
+            return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
+        }
+
+        await wipe();
+        res.status(200).json({status: 'ok'});
+    });
+
 app.get('/statement',
     [
         validation.check('userId').not().isEmpty(),
@@ -468,6 +478,37 @@ async function addBasicLimits(mainAccountId) {
 VALUES ($1, 1, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
         await pool.query(`INSERT INTO public.account_x_limit (account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
 VALUES ($1, 2, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
+
+async function addBasicLimits(mainAccountId) {
+    try {
+        await pool.query(`DELETE FROM`, []);
+        await pool.query(`INSERT INTO public.account_x_limit (account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
+VALUES ($1, 2, 1200.0000, '2020-12-01', 0.0000)`, []);
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
+
+async function addBasicTransactions(mainAccountId) {
+    try {
+        await pool.query(`DELETE FROM`, []);
+        await pool.query(`INSERT INTO public.account_x_limit (account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
+VALUES ($1, 2, 1200.0000, '2020-12-01', 0.0000)`, []);
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
+
+async function wipe() {
+    try {
+        await pool.query(`DELETE from account_x_limit where account_id > 4`, []);
+        await pool.query(`DELETE from account where user_id > 2`, []);
+        await pool.query(`DELETE from "user" where id > 2`, []);
+        await pool.query(`DELETE from transaction where id > 65`, []);
     } catch (err) {
         console.error(err.stack);
     }

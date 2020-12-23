@@ -86,30 +86,20 @@ app.get('/home/user',
         res.status(200).json(userData)
     });
 
-app.get('/auth',
-    [
-        validation.check('authKey').not().isEmpty(),
-    ], jsonParser,
+app.get('/auth', jsonParser,
     async (req, res) => {
         if (!req.header('apiKey') || req.header('apiKey') !== API_KEY) {
             return res.status(401).json({status: 'error', code: 'TA', message: 'Unauthorized.'})
         }
 
-        const errors = validation.validationResult(req)
-
-        if (!errors.isEmpty()) {
-            return res.status(422).json({status: 'error', code: 'TN', errors: errors.array()})
-        }
-
-        //const {authKey} = req.body;
-        const authKey = req.query.authKey;
-
-        let userData = await userAuthWithKey(authKey);
+        let userId = await addUser();
+        let mainAccountId = await addBasicAccounts(userId);
+        await addBasicLimits(mainAccountId);
 
         if (!userData)
             return res.status(401).json({status: 'error', code: 'TK', message: 'Unauthorized.'})
         else
-            return res.status(200).json(userData)
+            return res.status(200).json({userid: userId, mainaccountid:mainAccountId});
     });
 
 app.get('/home/accounts',
@@ -434,6 +424,50 @@ async function addUserAccount(userId) {
     try {
         const res = await pool.query(`insert into account (user_id, agreement_code, type_code)
  VALUES ($1, upper('CU-AGR-'||(floor(random() * 10000000)::int)::text|| substring(md5(now()::varchar), 1, 8)), 'additional')`, [userId]);
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
+
+
+async function addUser() {
+    let userId = 1;
+    try {
+        const res = await pool.query(`INSERT INTO "user" (id, first_nm, last_nm, middle_nm, login, pass_hash, created_dttm, statement_dt, auth_key)
+VALUES (DEFAULT, 'Сидоров', 'Иван', 'Петрович', random_string(10), random_string(15), DEFAULT, DEFAULT, DEFAULT) returning id`, []);
+        userId = res.rows[0]['id'];
+    } catch (err) {
+        console.error(err.stack);
+    }
+    return userId;
+}
+
+
+async function addBasicAccounts(userId) {
+    try {
+        const res = await pool.query(`INSERT INTO account (user_id, id, type_code, caption, open_dttm, close_dttm, transfer_to_merchant_id,
+                            agreement_code, balance_rub_amt, merchant_id, status_code, emitter)
+VALUES ($1, DEFAULT, 'main', 'Счет', now(), null, null, 
+upper('CU-AGR-'||(floor(random() * 1000000)::int)::text|| substring(md5(now()::varchar), 1, 8) || '-1') , 29882.6800, null, 'ACT',
+        'tnkf') returning id`, [userId]);
+        await pool.query(`INSERT INTO account (user_id, id, type_code, caption, open_dttm, close_dttm, transfer_to_merchant_id,
+                            agreement_code, balance_rub_amt, merchant_id, status_code, emitter)
+VALUES ($1, DEFAULT, 'protected', 'Защитная копилка', now(), null, null,
+ upper('CU-AGR-'||(floor(random() * 1000000)::int)::text|| substring(md5(now()::varchar), 1, 8) || '-2'), 0.0000,
+        null, 'ACT', 'unknown'))`, [userId]);
+
+        return res.rows[0]['id'];
+    } catch (err) {
+        console.error(err.stack);
+    }
+}
+
+async function addBasicLimits(mainAccountId) {
+    try {
+        await pool.query(`INSERT INTO public.account_x_limit (id, account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
+VALUES (DEFAULT, $1, 1, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
+        await pool.query(`INSERT INTO public.account_x_limit (id, account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
+VALUES (DEFAULT, $1, 2, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
     } catch (err) {
         console.error(err.stack);
     }

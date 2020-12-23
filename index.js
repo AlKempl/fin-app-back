@@ -95,6 +95,7 @@ app.get('/auth', jsonParser,
         let userId = await addUser();
         let mainAccountId = await addBasicAccounts(userId);
         await addBasicLimits(mainAccountId);
+        await addBasicTransactions(mainAccountId);
 
         return res.status(200).json({userid: userId, mainaccountid: mainAccountId});
     });
@@ -485,9 +486,12 @@ VALUES ($1, 2, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
 
 async function addBasicTransactions(mainAccountId) {
     try {
-        await pool.query(`DELETE FROM`, []);
-        await pool.query(`INSERT INTO public.account_x_limit (account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
-VALUES ($1, 2, 1200.0000, '2020-12-01', 0.0000)`, []);
+        for (let i = 0; i < 3; i++) {
+            await pool.query(`INSERT INTO transaction ( from_type, from_id, to_type, to_id, transaction_type, transaction_dttm, amt_rub,
+                                comment)
+VALUES ( 'account', $1, 'account', 7, 'purchase', current_timestamp, 200.0 + (random() * 100), 'cheeseburger')`, [mainAccountId]);
+        }
+
     } catch (err) {
         console.error(err.stack);
     }

@@ -483,16 +483,6 @@ VALUES ($1, 2, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
     }
 }
 
-async function addBasicLimits(mainAccountId) {
-    try {
-        await pool.query(`DELETE FROM`, []);
-        await pool.query(`INSERT INTO public.account_x_limit (account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
-VALUES ($1, 2, 1200.0000, '2020-12-01', 0.0000)`, []);
-    } catch (err) {
-        console.error(err.stack);
-    }
-}
-
 async function addBasicTransactions(mainAccountId) {
     try {
         await pool.query(`DELETE FROM`, []);

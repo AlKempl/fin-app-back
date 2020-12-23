@@ -548,7 +548,7 @@ where account_id = $1 and merchant_id = $2 and month_dt = date_trunc('month', cu
 async function resetUsageLimits(accountId, merchantId) {
     try {
         const res = await pool.query(`update account_x_limit axl set rub_spent_amt = 0.0 
-where account_id = $1 and merchant_id = $2 and month_dt = date_trunc('month', current_date) returning rub_spent_amt`, [accountId, merchantId, sumAmt]);
+where account_id = $1 and merchant_id = $2 and month_dt = date_trunc('month', current_date) returning rub_spent_amt`, [accountId, merchantId]);
         if (res.rows.length === 0)
             return null
         else

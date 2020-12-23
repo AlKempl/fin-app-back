@@ -477,9 +477,11 @@ VALUES ($1, 'protected', 'Защитная копилка', current_timestamp, n
 async function addBasicLimits(mainAccountId) {
     try {
         await pool.query(`INSERT INTO public.account_x_limit (account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
-VALUES ($1, 1, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
+VALUES ($1, 1, 1000.0000, '2020-12-01', 0.0000)`, [mainAccountId]); //taxi
         await pool.query(`INSERT INTO public.account_x_limit (account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
-VALUES ($1, 2, 1200.0000, '2020-12-01', 0.0000)`, [mainAccountId]);
+VALUES ($1, 2, 800.0000, '2020-12-01', 0.0000)`, [mainAccountId]);  //mcd
+        await pool.query(`INSERT INTO public.account_x_limit (account_id, merchant_id, rub_limit_amt, month_dt, rub_spent_amt)
+VALUES ($1, 2, 500.0000, '2020-12-01', 0.0000)`, [mainAccountId]); //cinema
     } catch (err) {
         console.error(err.stack);
     }

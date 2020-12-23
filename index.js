@@ -381,8 +381,10 @@ async function servicesList() {
     try {
         const res = await pool.query(`select id
 , service_nm as serviceName
-, service_img_url as imgUrl
+, service_icon as icon
 , merchant_nm as providerName
+, default_purchase_amt as defaultSumAmt
+, default_purchase_comment as defaultComment
 from merchant m
 where service_flg = 1`, []);
         if (res.rows.length === 0)
